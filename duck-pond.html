@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duck Pond</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --panel: rgba(255, 255, 255, 0.88);
+    --text: #1a1a1a;
+    --muted: #555;
+    --navy: #1e3a5f;
+    --navy-tint: #e8edf3;
+    --gold: #b8860b;
+    --red: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e8f6ff; font-family: "DM Sans", sans-serif; color: var(--text); }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: manipulation; }
+  .hud {
+    position: fixed; top: 16px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    pointer-events: none;
+  }
+  .card {
+    background: var(--panel); border-radius: 14px; padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(30, 58, 95, 0.15);
+  }
+  h1 { font-family: "Space Grotesk", sans-serif; font-size: 22px; margin: 0 0 2px; color: var(--navy); }
+  .hint { margin: 0; font-size: 14px; color: var(--muted); max-width: 320px; }
+  .score { font-family: "Space Grotesk", sans-serif; font-size: 28px; font-weight: 700; color: var(--navy); text-align: right; }
+  .score small { display: block; font-family: "DM Sans", sans-serif; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .lives { text-align: right; font-size: 18px; letter-spacing: 2px; min-height: 22px; }
+  .controls { margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; pointer-events: auto; }
+  button {
+    font: 500 13px "DM Sans", sans-serif; border: 0; border-radius: 8px; padding: 6px 10px;
+    background: var(--navy); color: #fff; cursor: pointer;
+  }
+  button.ghost { background: var(--navy-tint); color: var(--navy); }
+
+  /* Start / result overlay */
+  .overlay {
+    position: fixed; inset: 0; display: flex;
+    background: rgba(30, 58, 95, 0.35); padding: 16px; overflow-y: auto;
+  }
+  .overlay > .modal { margin: auto; }
+  .overlay[hidden] { display: none; }
+  .modal {
+    background: #fff; border-radius: 18px; padding: 24px; width: 100%; max-width: 420px;
+    box-shadow: 0 12px 40px rgba(30, 58, 95, 0.3);
+  }
+  .modal h2 { font-family: "Space Grotesk", sans-serif; font-size: 28px; margin: 0 0 4px; color: var(--navy); }
+  .modal p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .label { font-weight: 700; font-size: 13px; color: var(--navy); margin: 16px 0 8px; display: block; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .level {
+    border: 2px solid var(--navy-tint); background: #fff; color: var(--text); border-radius: 10px;
+    padding: 10px 6px; text-align: center; cursor: pointer; font-size: 14px;
+  }
+  .level strong { display: block; font-family: "Space Grotesk", sans-serif; font-size: 16px; color: var(--navy); }
+  .level span { font-size: 11px; color: var(--muted); }
+  .level[aria-pressed="true"] { border-color: var(--navy); background: var(--navy-tint); }
+  .level-desc { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 36px; }
+  @media (max-width: 560px) {
+    .hint { display: none; }
+    h1 { font-size: 18px; margin: 0; }
+  }
+  .start { width: 100%; padding: 12px; font-size: 16px; font-weight: 700; margin-top: 12px; border-radius: 10px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 8px; }
+  .stat { background: var(--navy-tint); border-radius: 10px; padding: 10px; text-align: center; }
+  .stat b { display: block; font-family: "Space Grotesk", sans-serif; font-size: 20px; color: var(--navy); }
+  .stat span { font-size: 11px; color: var(--muted); }
+  .row-buttons { display: flex; gap: 8px; }
+  .row-buttons button { flex: 1; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="card">
+    <h1>Duck Pond</h1>
+    <p class="hint" data-hint>Press any key (or tap) to send a duck into the pond</p>
+  </div>
+  <div class="card">
+    <div class="score"><span data-score>0</span><span data-target-label></span><small data-level-label>ducks splashed</small></div>
+    <div class="lives" data-lives></div>
+    <div class="controls">
+      <button class="ghost" data-sound>Sound: on</button>
+      <button data-menu>Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Start screen -->
+<div class="overlay" data-start-screen>
+  <div class="modal">
+    <h2>Duck Pond</h2>
+    <p>Spell the word on screen. Every correct letter sends a duck splashing into the pond. Type fast, the clock speeds up!</p>
+
+    <span class="label">Difficulty</span>
+    <div class="levels">
+      <button class="level" data-level="easy" aria-pressed="true"><strong>Easy</strong><span>Short words</span></button>
+      <button class="level" data-level="medium" aria-pressed="false"><strong>Medium</strong><span>Medium words</span></button>
+      <button class="level" data-level="hard" aria-pressed="false"><strong>Hard</strong><span>Long words, fast</span></button>
+    </div>
+    <div class="level-desc" data-level-desc></div>
+
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><b data-best-wpm>0</b><span>best WPM</span></div>
+      <div class="stat"><b data-best-ducks>0</b><span>best ducks</span></div>
+      <div class="stat"><b data-best-words>0</b><span>best words</span></div>
+    </div>
+    <p style="margin:4px 0 0;font-size:12px">The pond grows with every duck, the scene changes every 30 ducks, and the game ends at 100,000 ducks. Needs a keyboard.</p>
+
+    <button class="start" data-start>Start game</button>
+  </div>
+</div>
+
+<!-- Result screen -->
+<div class="overlay" data-result-screen hidden>
+  <div class="modal">
+    <h2 data-result-title>You win!</h2>
+    <p data-result-text></p>
+    <div class="stats">
+      <div class="stat"><b data-stat-wpm>0</b><span>words per min</span></div>
+      <div class="stat"><b data-stat-score>0</b><span>ducks</span></div>
+      <div class="stat"><b data-stat-words>0</b><span>words spelled</span></div>
+      <div class="stat"><b data-stat-time>0s</b><span>time</span></div>
+      <div class="stat"><b data-stat-acc>100%</b><span>accuracy</span></div>
+      <div class="stat"><b data-stat-best>0</b><span>best WPM</span></div>
+    </div>
+    <div class="row-buttons">
+      <button class="ghost start" data-to-menu>Change settings</button>
+      <button class="start" data-again>Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const $ = function (sel) { return document.querySelector(sel); };
+
+  const scoreEl = $("[data-score]");
+  const targetLabelEl = $("[data-target-label]");
+  const levelLabelEl = $("[data-level-label]");
+  const livesEl = $("[data-lives]");
+  const hintEl = $("[data-hint]");
+  const soundBtn = $("[data-sound]");
+  const menuBtn = $("[data-menu]");
+  const startScreen = $("[data-start-screen]");
+  const resultScreen = $("[data-result-screen]");
+  const levelDesc = $("[data-level-desc]");
+
+  // Seconds allowed per letter at the start; the clock tightens with every word spelled
+  const DIFFICULTIES = {
+    easy: {
+      label: "Easy",
+      perLetter: 2,
+      lives: 5,
+      wrongCostsLife: false,
+      words: ["DUCK", "POND", "SWIM", "FROG", "LILY", "SUN", "BEAK", "WING", "NEST", "EGG", "BUG", "MUD", "REED", "FISH", "WET", "SPLAT", "TOAD", "BOAT", "LEAF", "RAIN", "CLAM", "SAND", "TREE", "BIRD", "FLAP", "DIVE", "HOP", "SNAIL", "WAVE", "MOSS"],
+      desc: "Short words, 2 seconds per letter. Wrong keys are free. 5 lives."
+    },
+    medium: {
+      label: "Medium",
+      perLetter: 1.2,
+      lives: 3,
+      wrongCostsLife: false,
+      words: ["QUACK", "SPLASH", "PADDLE", "PUDDLE", "RIPPLE", "TURTLE", "WADDLE", "FEATHER", "STREAM", "BREAD", "WATER", "OTTER", "BEAVER", "MEADOW", "PEBBLE", "SWAN", "GOOSE", "HERON", "MARSH", "LOTUS", "CANOE", "BUBBLE", "FLOAT", "PLUNGE", "SUNSET", "BRIDGE", "SPROUT", "MINNOW", "GLIDE", "BREEZE"],
+      desc: "Medium words, 1.2 seconds per letter. Wrong keys are free. 3 lives."
+    },
+    hard: {
+      label: "Hard",
+      perLetter: 0.7,
+      lives: 3,
+      wrongCostsLife: true,
+      words: ["DRAGONFLY", "DUCKLING", "TADPOLE", "WATERFALL", "MALLARD", "KINGFISHER", "SALAMANDER", "BULLFROG", "CATTAIL", "WATERLILY", "PELICAN", "FLAMINGO", "SANDPIPER", "MOSQUITO", "WETLANDS", "RAINDROP", "WHIRLPOOL", "CRAYFISH", "SNAPPING", "MIGRATION", "PLUMAGE", "HUMMINGBIRD", "SUNFLOWER", "RAINBOW", "THUNDERSTORM", "BUTTERFLY", "WILLOW", "SHORELINE", "NEWT", "LAGOON"],
+      desc: "Long words, 0.7 seconds per letter. Wrong keys AND running out of time cost a life. 3 lives."
+    }
+  };
+  const SPEEDUP = 0.97;   // each word spelled leaves 97% of the time for the next
+  const MIN_SPEED = 0.45; // never faster than 45% of the starting time
+
+  const MAX_DUCKS = 100000; // the game always ends here
+  const BANK_SIZE = 5;
+  const MAX_IN_POND = 25;
+  const DUCK_COLORS = [
+    { body: "#ffd84d", wing: "#f2c230" },
+    { body: "#ffffff", wing: "#e6e6e6" },
+    { body: "#8b6b4a", wing: "#6f5338" },
+    { body: "#ffe680", wing: "#f5cf4a" }
+  ];
+
+  // Every 30 ducks the scene moves to the next theme
+  const DUCKS_PER_SCENE = 30;
+  const THEMES = [
+    { name: "Sunny day", skyTop: "#bfe3ff", skyBottom: "#e8f6ff", sun: "#ffe48a", hills: "#9fd38a", grass: "#7cc56a", waterIn: "#6ec8ef", waterOut: "#2f8fc4", bank: "#c9b58a", reed: "#4f8f3a", stars: 0, cloud: 0.9 },
+    { name: "Sunset", skyTop: "#ff9a76", skyBottom: "#ffd6a5", sun: "#ff6f3c", hills: "#b5a35a", grass: "#8fae5a", waterIn: "#f0a07a", waterOut: "#5a6fa8", bank: "#b89870", reed: "#5d7a32", stars: 0, cloud: 0.75 },
+    { name: "Starry night", skyTop: "#0b1d3a", skyBottom: "#2b3f6b", sun: "#f4f1de", hills: "#2f5a3a", grass: "#2e6b3c", waterIn: "#3a5f8f", waterOut: "#14304f", bank: "#6b604a", reed: "#2f5a2a", stars: 1, cloud: 0.25 },
+    { name: "Autumn", skyTop: "#f6d7a7", skyBottom: "#fdf0d5", sun: "#ffd166", hills: "#d98e3a", grass: "#a8a04a", waterIn: "#5fb0c9", waterOut: "#2a6f8f", bank: "#a8865a", reed: "#8a5a2a", stars: 0, cloud: 0.85 },
+    { name: "Winter", skyTop: "#cfdeee", skyBottom: "#f7fbff", sun: "#fff6d0", hills: "#e3ecf5", grass: "#eef3f8", waterIn: "#9fd3e8", waterOut: "#4a8fb5", bank: "#c8d3dc", reed: "#6b7f5a", stars: 0, cloud: 0.95 }
+  ];
+  const STARS = [];
+  for (let i = 0; i < 60; i++) STARS.push({ x: Math.random(), y: Math.random() * 0.5, r: 0.6 + Math.random() * 1.4, p: Math.random() * 6 });
+
+  let W = 0, H = 0, pond = null, pondBase = null, bankY = 0, hudBottom = 0;
+  let ducksAdded = 0;   // ducks splashed this game, drives pond size and scene
+  let pondGrowth = 1;   // eased toward the target size each frame
+  let themeIndex = 0;
+  let prevTheme = THEMES[0];
+  let themeBlend = 1;   // 0..1 crossfade from prevTheme to the current one
+  let banner = null;
+  let ducks = [];
+  let splashes = [];
+  let floaters = [];
+  let soundOn = true;
+  let audio = null;
+  let lastTime = performance.now();
+
+  // Game state
+  let mode = "menu"; // menu | playing | over
+  let level = "easy";
+  let score = 0;        // ducks splashed (one per correct letter)
+  let lives = 0;
+  let currentWord = "";
+  let typed = 0;        // letters of currentWord typed so far
+  let wordsDone = 0;
+  let speedFactor = 1;
+  let timeLeft = 0;
+  let wordTime = 0;
+  let elapsed = 0;
+  let presses = 0;
+  let hits = 0;
+  let shake = 0;
+  let bests = {};
+
+  // Remember last level and best scores for this viewer (optional convenience)
+  try {
+    const saved = JSON.parse(localStorage.getItem("duckPondSettings") || "null");
+    if (saved && DIFFICULTIES[saved.level]) level = saved.level;
+    if (saved && saved.bests) bests = saved.bests;
+  } catch (e) { /* storage unavailable */ }
+
+  function saveSettings() {
+    try { localStorage.setItem("duckPondSettings", JSON.stringify({ level: level, bests: bests })); } catch (e) { /* ignore */ }
+  }
+
+  function best() {
+    return bests[level] || { wpm: 0, ducks: 0, words: 0 };
+  }
+
+  // Standard typing speed: 5 correct letters = 1 word
+  function wpm() {
+    return elapsed > 1 ? Math.round(hits / 5 / (elapsed / 60)) : 0;
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pondBase = {
+      x: W * 0.62,
+      y: H * 0.66,
+      rx: Math.min(W * 0.28, 440),
+      ry: Math.min(H * 0.17, 160)
+    };
+    pondBase.ry = Math.min(pondBase.ry, pondBase.rx * 0.6);
+    bankY = H * 0.62;
+    hudBottom = document.querySelector(".hud").getBoundingClientRect().bottom;
+    applyPond();
+  }
+
+  // Grows up to 60% bigger as ducks land, easing off so it never fills the screen
+  function targetGrowth() {
+    return 1 + 0.6 * (1 - Math.exp(-ducksAdded / 25));
+  }
+
+  function applyPond() {
+    const rx = pondBase.rx * pondGrowth;
+    let ry = pondBase.ry * pondGrowth;
+    ry = Math.min(ry, H - pondBase.y - 14, H * 0.3);
+    // Slide left if the pond would run off the right edge
+    const x = Math.min(pondBase.x, W - rx - 18);
+    pond = { x: x, y: pondBase.y, rx: rx, ry: ry };
+    layoutBank();
+  }
+
+  function hexToRgb(h) {
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function mixColor(a, b, t) {
+    const x = hexToRgb(a), y = hexToRgb(b);
+    return "rgb(" + Math.round(x[0] + (y[0] - x[0]) * t) + "," + Math.round(x[1] + (y[1] - x[1]) * t) + "," + Math.round(x[2] + (y[2] - x[2]) * t) + ")";
+  }
+
+  function palette() {
+    const cur = THEMES[themeIndex];
+    const t = themeBlend;
+    const p = {};
+    Object.keys(cur).forEach(function (k) {
+      if (k === "name") return;
+      p[k] = typeof cur[k] === "number" ? prevTheme[k] + (cur[k] - prevTheme[k]) * t : mixColor(prevTheme[k], cur[k], t);
+    });
+    return p;
+  }
+
+  function setTheme(i, instant) {
+    if (i === themeIndex) return;
+    prevTheme = instant ? THEMES[i] : THEMES[themeIndex];
+    themeIndex = i;
+    themeBlend = instant ? 1 : 0;
+    if (!instant) {
+      banner = { text: THEMES[i].name + "!", t: 0 };
+      tone(523, 1047, 0.4, "triangle", 0.12);
+    }
+  }
+
+  function duckScale() {
+    return Math.max(0.6, Math.min(1, W / 900));
+  }
+
+  function bankSlot(i) {
+    const s = duckScale();
+    const startX = Math.max(40, pond.x - pond.rx - 60 * s);
+    // Squeeze the line on narrow screens so every waiting duck stays visible
+    const gap = Math.min(62 * s, (startX - 30) / (BANK_SIZE - 1));
+    if (gap < 30 * s) {
+      // Too tight for one line: queue the extra ducks along the front of the grass instead
+      return i === 0 ? { x: startX, y: bankY + 30 * s } : { x: startX + (i - 1) * 62 * s, y: Math.min(H - 30, pond.y + pond.ry + 50 * s) };
+    }
+    return { x: startX - i * gap, y: bankY + 30 * s };
+  }
+
+  function makeDuck(slot) {
+    const p = bankSlot(slot);
+    return {
+      state: "bank",
+      slot: slot,
+      x: p.x - 400, y: p.y,
+      tx: p.x, ty: p.y,
+      dir: 1,
+      color: DUCK_COLORS[Math.floor(Math.random() * DUCK_COLORS.length)],
+      // About a third of the ducks are slowpokes
+      speed: Math.random() < 0.35 ? 0.4 + Math.random() * 0.2 : 0.9 + Math.random() * 0.3,
+      t: Math.random() * 10,
+      jump: null,
+      swimTarget: null,
+      fly: null
+    };
+  }
+
+  function bankDucks() {
+    return ducks.filter(function (d) { return d.state === "bank"; }).sort(function (a, b) { return a.slot - b.slot; });
+  }
+
+  function layoutBank() {
+    bankDucks().forEach(function (d, i) {
+      d.slot = i;
+      const p = bankSlot(i);
+      d.tx = p.x; d.ty = p.y;
+    });
+  }
+
+  function refillBank() {
+    let onBank = bankDucks().length;
+    while (onBank < BANK_SIZE) {
+      ducks.push(makeDuck(onBank));
+      onBank++;
+    }
+    layoutBank();
+  }
+
+  function randomPondPoint() {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * 0.75;
+    return { x: pond.x + Math.cos(a) * pond.rx * r, y: pond.y + Math.sin(a) * pond.ry * r };
+  }
+
+  function nextWord() {
+    const cfg = DIFFICULTIES[level];
+    let w = currentWord;
+    // Avoid the same word twice in a row
+    while (w === currentWord) w = cfg.words[Math.floor(Math.random() * cfg.words.length)];
+    currentWord = w;
+    typed = 0;
+    wordTime = w.length * cfg.perLetter * speedFactor;
+    timeLeft = wordTime;
+  }
+
+  function launchDuck() {
+    const d = bankDucks()[0];
+    if (!d) return;
+    const land = randomPondPoint();
+    d.state = "jumping";
+    d.jump = { sx: d.x, sy: d.y, ex: land.x, ey: land.y, t: 0, dur: 0.7 / d.speed };
+    d.dir = land.x >= d.x ? 1 : -1;
+    quack();
+    layoutBank();
+    refillBank();
+
+    const swimming = ducks.filter(function (x) { return x.state === "swim"; });
+    if (swimming.length >= MAX_IN_POND) {
+      const old = swimming[0];
+      old.state = "flying";
+      old.fly = { vx: (Math.random() < 0.5 ? -1 : 1) * 260, vy: -220 };
+      old.dir = old.fly.vx > 0 ? 1 : -1;
+    }
+  }
+
+  function addSplash(x, y) {
+    splashes.push({ x: x, y: y, t: 0, kind: "ring" });
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI * (0.15 + Math.random() * 0.7);
+      const sp = 80 + Math.random() * 120;
+      splashes.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, kind: "drop" });
+    }
+  }
+
+  function addFloater(text, color) {
+    const d = bankDucks()[0];
+    const x = d ? d.tx : W * 0.2;
+    const y = d ? d.ty - 90 * duckScale() : H * 0.5;
+    floaters.push({ text: text, color: color, x: x, y: y, t: 0 });
+  }
+
+  // Sound
+  function ensureAudio() {
+    if (!audio) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audio = new AC();
+    }
+    if (audio && audio.state === "suspended") audio.resume();
+  }
+
+  function tone(freq, endFreq, dur, type, vol) {
+    if (!soundOn || !audio) return;
+    const now = audio.currentTime;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + dur);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(vol, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.connect(gain); gain.connect(audio.destination);
+    osc.start(now); osc.stop(now + dur + 0.02);
+  }
+
+  function quack() {
+    if (!soundOn || !audio) return;
+    const now = audio.currentTime;
+    const osc = audio.createOscillator();
+    const filter = audio.createBiquadFilter();
+    const gain = audio.createGain();
+    osc.type = "sawtooth";
+    const base = 380 + Math.random() * 120;
+    osc.frequency.setValueAtTime(base, now);
+    osc.frequency.exponentialRampToValueAtTime(base * 0.6, now + 0.18);
+    filter.type = "bandpass";
+    filter.frequency.value = 1100;
+    filter.Q.value = 2;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc.connect(filter); filter.connect(gain); gain.connect(audio.destination);
+    osc.start(now); osc.stop(now + 0.25);
+  }
+
+  function splashSound() {
+    if (!soundOn || !audio) return;
+    const now = audio.currentTime;
+    const len = Math.floor(audio.sampleRate * 0.35);
+    const buf = audio.createBuffer(1, len, audio.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const src = audio.createBufferSource();
+    const filter = audio.createBiquadFilter();
+    const gain = audio.createGain();
+    src.buffer = buf;
+    filter.type = "lowpass";
+    filter.frequency.value = 1400;
+    gain.gain.value = 0.35;
+    src.connect(filter); filter.connect(gain); gain.connect(audio.destination);
+    src.start(now);
+  }
+
+  // Game flow
+  function updateHud() {
+    const cfg = DIFFICULTIES[level];
+    scoreEl.textContent = score.toLocaleString();
+    targetLabelEl.textContent = "";
+    levelLabelEl.textContent = mode === "menu" ? "ducks splashed" : cfg.label + " · " + wpm() + " WPM · " + wordsDone + " words";
+    livesEl.textContent = mode !== "menu" ? "❤️".repeat(Math.max(0, lives)) + "\u{1F90D}".repeat(Math.max(0, cfg.lives - lives)) : "";
+    hintEl.textContent = "Type the word on screen. Each correct letter sends a duck in!";
+    hudBottom = document.querySelector(".hud").getBoundingClientRect().bottom;
+  }
+
+  function startGame() {
+    saveSettings();
+    const cfg = DIFFICULTIES[level];
+    ducks = ducks.filter(function (d) { return d.state === "bank"; });
+    splashes = [];
+    floaters = [];
+    score = 0;
+    lives = cfg.lives;
+    elapsed = 0;
+    ducksAdded = 0;
+    pondGrowth = 1;
+    applyPond();
+    setTheme(0, true);
+    banner = null;
+    presses = 0;
+    hits = 0;
+    wordsDone = 0;
+    speedFactor = 1;
+    currentWord = "";
+    refillBank();
+    nextWord();
+    mode = "playing";
+    startScreen.hidden = true;
+    resultScreen.hidden = true;
+    updateHud();
+    ensureAudio();
+  }
+
+  function endGame(won) {
+    if (mode !== "playing") return;
+    mode = "over";
+    currentWord = "";
+    const cfg = DIFFICULTIES[level];
+    const speed = wpm();
+    const b = best();
+    const newBest = speed > b.wpm;
+    bests[level] = { wpm: Math.max(b.wpm, speed), ducks: Math.max(b.ducks, score), words: Math.max(b.words, wordsDone) };
+    saveSettings();
+    $("[data-result-title]").textContent = won ? "100,000 ducks! Game over" : newBest ? "New best speed!" : "Out of lives";
+    $("[data-result-text]").textContent = "You typed " + speed + " words per minute on " + cfg.label + " and splashed " + score.toLocaleString() + " ducks.";
+    $("[data-stat-wpm]").textContent = speed;
+    $("[data-stat-score]").textContent = score.toLocaleString();
+    $("[data-stat-words]").textContent = wordsDone;
+    $("[data-stat-time]").textContent = Math.round(elapsed) + "s";
+    $("[data-stat-acc]").textContent = presses ? Math.round(hits / presses * 100) + "%" : "100%";
+    $("[data-stat-best]").textContent = bests[level].wpm;
+    won = won || newBest;
+    if (won) {
+      tone(523, 784, 0.25, "triangle", 0.2);
+      setTimeout(function () { tone(659, 1047, 0.35, "triangle", 0.2); }, 180);
+    } else {
+      tone(330, 165, 0.5, "triangle", 0.2);
+    }
+    setTimeout(function () {
+      resultScreen.hidden = false;
+      $("[data-again]").focus();
+    }, won ? 900 : 500);
+  }
+
+  function loseLife(reason) {
+    lives--;
+    shake = 0.35;
+    addFloater(reason, "#c0392b");
+    tone(220, 140, 0.25, "square", 0.08);
+    updateHud();
+    if (lives <= 0) endGame(false);
+    else nextWord();
+  }
+
+  function showMenu() {
+    mode = "menu";
+    currentWord = "";
+    resultScreen.hidden = true;
+    startScreen.hidden = false;
+    syncMenu();
+    updateHud();
+    $("[data-start]").focus();
+  }
+
+  function syncMenu() {
+    document.querySelectorAll("[data-level]").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-level") === level ? "true" : "false");
+    });
+    levelDesc.textContent = DIFFICULTIES[level].desc;
+    const b = best();
+    $("[data-best-wpm]").textContent = b.wpm;
+    $("[data-best-ducks]").textContent = b.ducks.toLocaleString();
+    $("[data-best-words]").textContent = b.words;
+  }
+
+  function handlePress(key) {
+    if (mode !== "playing" || !currentWord) return;
+    const cfg = DIFFICULTIES[level];
+    if (bankDucks().length === 0) return;
+    presses++;
+    if (key === currentWord.charAt(typed)) {
+      hits++;
+      typed++;
+      launchDuck();
+      if (typed >= currentWord.length) {
+        wordsDone++;
+        speedFactor = Math.max(MIN_SPEED, speedFactor * SPEEDUP);
+        addFloater(currentWord + "!", "#1e3a5f");
+        tone(660, 990, 0.18, "triangle", 0.12);
+        nextWord();
+      }
+      updateHud();
+    } else {
+      shake = 0.25;
+      if (cfg.wrongCostsLife) {
+        loseLife("Wrong key!");
+      } else {
+        addFloater("Next: " + currentWord.charAt(typed), "#b8860b");
+        tone(260, 200, 0.12, "square", 0.05);
+      }
+    }
+  }
+
+  // Update
+  function update(dt) {
+    if (mode === "playing") {
+      elapsed += dt;
+      timeLeft -= dt;
+      if (timeLeft <= 0) loseLife("Too slow!");
+    }
+    if (shake > 0) shake -= dt;
+
+    const goal = targetGrowth();
+    if (Math.abs(goal - pondGrowth) > 0.0005) {
+      pondGrowth += (goal - pondGrowth) * Math.min(1, dt * 2);
+      applyPond();
+    }
+    if (themeBlend < 1) themeBlend = Math.min(1, themeBlend + dt / 2);
+    if (banner) { banner.t += dt; if (banner.t > 2.5) banner = null; }
+
+    ducks.forEach(function (d) {
+      d.t += dt * d.speed;
+      if (d.state === "bank") {
+        const dx = d.tx - d.x;
+        if (Math.abs(dx) > 1) {
+          d.dir = dx > 0 ? 1 : -1;
+          d.x += Math.sign(dx) * Math.min(Math.abs(dx), 220 * d.speed * dt);
+        }
+        d.y += (d.ty - d.y) * Math.min(1, dt * 8);
+      } else if (d.state === "jumping") {
+        const j = d.jump;
+        j.t += dt / j.dur;
+        const k = Math.min(1, j.t);
+        d.x = j.sx + (j.ex - j.sx) * k;
+        d.y = j.sy + (j.ey - j.sy) * k - Math.sin(k * Math.PI) * 140 * duckScale();
+        if (k >= 1) {
+          d.state = "swim";
+          d.swimTarget = randomPondPoint();
+          addSplash(d.x, d.y);
+          splashSound();
+          if (mode === "playing") {
+            ducksAdded++;
+            setTheme(Math.floor(ducksAdded / DUCKS_PER_SCENE) % THEMES.length, false);
+            score++;
+            updateHud();
+            if (ducksAdded >= MAX_DUCKS) endGame(true);
+          }
+        }
+      } else if (d.state === "swim") {
+        const tgt = d.swimTarget;
+        const dx = tgt.x - d.x, dy = tgt.y - d.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 4) {
+          d.swimTarget = randomPondPoint();
+        } else {
+          const sp = 40 * d.speed * dt;
+          d.x += dx / dist * sp;
+          d.y += dy / dist * sp;
+          if (Math.abs(dx) > 2) d.dir = dx > 0 ? 1 : -1;
+        }
+      } else if (d.state === "flying") {
+        d.x += d.fly.vx * dt;
+        d.y += d.fly.vy * dt;
+        d.fly.vy -= 40 * dt;
+      }
+    });
+
+    ducks = ducks.filter(function (d) {
+      return !(d.state === "flying" && (d.y < -80 || d.x < -80 || d.x > W + 80));
+    });
+
+    splashes.forEach(function (s) {
+      s.t += dt;
+      if (s.kind === "drop") {
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vy += 500 * dt;
+      }
+    });
+    splashes = splashes.filter(function (s) { return s.t < (s.kind === "ring" ? 1.4 : 0.6); });
+
+    floaters.forEach(function (f) { f.t += dt; f.y -= 30 * dt; });
+    floaters = floaters.filter(function (f) { return f.t < 1; });
+  }
+
+  // Draw
+  function drawScene(time) {
+    const p = palette();
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, p.skyTop);
+    sky.addColorStop(0.55, p.skyBottom);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    if (p.stars > 0.01) {
+      STARS.forEach(function (s) {
+        ctx.globalAlpha = p.stars * (0.5 + 0.5 * Math.sin(time * 0.002 + s.p));
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.fillStyle = p.sun;
+    ctx.beginPath();
+    ctx.arc(W * 0.86, H * 0.18, Math.min(W, H) * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+
+    drawCloud(((time * 0.012) % (W + 300)) - 150, H * 0.2, 1, p.cloud);
+    drawCloud(((time * 0.008 + W * 0.5) % (W + 300)) - 150, H * 0.3, 0.7, p.cloud);
+
+    ctx.fillStyle = p.hills;
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.55);
+    ctx.quadraticCurveTo(W * 0.25, H * 0.42, W * 0.5, H * 0.52);
+    ctx.quadraticCurveTo(W * 0.75, H * 0.44, W, H * 0.53);
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = p.grass;
+    ctx.fillRect(0, H * 0.56, W, H * 0.44);
+
+    ctx.fillStyle = p.bank;
+    ctx.beginPath();
+    ctx.ellipse(pond.x, pond.y, pond.rx + 14, pond.ry + 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const water = ctx.createRadialGradient(pond.x, pond.y - pond.ry * 0.3, 10, pond.x, pond.y, pond.rx);
+    water.addColorStop(0, p.waterIn);
+    water.addColorStop(1, p.waterOut);
+    ctx.fillStyle = water;
+    ctx.beginPath();
+    ctx.ellipse(pond.x, pond.y, pond.rx, pond.ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(pond.x, pond.y, pond.rx, pond.ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const y = pond.y - pond.ry + (i + 1) * (pond.ry * 2 / 7);
+      ctx.beginPath();
+      for (let x = pond.x - pond.rx; x <= pond.x + pond.rx; x += 12) {
+        const yy = y + Math.sin(x * 0.03 + time * 0.002 + i) * 3;
+        if (x === pond.x - pond.rx) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    for (let i = 0; i < 7; i++) {
+      const rx = pond.x + pond.rx * (0.55 + i * 0.07);
+      const ry = pond.y - pond.ry * (0.6 - i * 0.05);
+      const sway = Math.sin(time * 0.0015 + i) * 4;
+      ctx.strokeStyle = p.reed;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.quadraticCurveTo(rx + sway, ry - 30, rx + sway * 1.5, ry - 55);
+      ctx.stroke();
+      ctx.fillStyle = "#7a4e2d";
+      ctx.beginPath();
+      ctx.ellipse(rx + sway * 1.5, ry - 58, 4, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    drawLily(pond.x - pond.rx * 0.55, pond.y + pond.ry * 0.35);
+    drawLily(pond.x + pond.rx * 0.2, pond.y + pond.ry * 0.55);
+    drawLily(pond.x - pond.rx * 0.1, pond.y - pond.ry * 0.6);
+  }
+
+  function drawCloud(x, y, s, alpha) {
+    ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+    ctx.beginPath();
+    ctx.arc(x, y, 26 * s, 0, Math.PI * 2);
+    ctx.arc(x + 30 * s, y - 12 * s, 32 * s, 0, Math.PI * 2);
+    ctx.arc(x + 64 * s, y, 24 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawLily(x, y) {
+    ctx.fillStyle = "#3f9e4d";
+    ctx.beginPath();
+    ctx.ellipse(x, y, 22, 10, 0, 0.3, Math.PI * 2 - 0.1);
+    ctx.lineTo(x, y);
+    ctx.fill();
+  }
+
+  function drawDuck(d) {
+    const s = duckScale();
+    const inWater = d.state === "swim";
+    const bob = inWater ? Math.sin(d.t * 3) * 2 : 0;
+    const waddle = d.state === "bank" ? Math.sin(d.t * 10) * 0.08 : 0;
+    const flap = d.state === "flying" || d.state === "jumping";
+
+    ctx.save();
+    ctx.translate(d.x, d.y + bob);
+    ctx.scale(d.dir * s, s);
+    ctx.rotate(waddle);
+
+    if (inWater) {
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 8, 34 + Math.sin(d.t * 3) * 3, 7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (d.state === "bank") {
+      ctx.fillStyle = "rgba(0,0,0,0.15)";
+      ctx.beginPath();
+      ctx.ellipse(0, 18, 26, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f28c28";
+      ctx.fillRect(-8 + Math.sin(d.t * 10) * 3, 10, 7, 8);
+      ctx.fillRect(4 - Math.sin(d.t * 10) * 3, 10, 7, 8);
+    }
+
+    ctx.fillStyle = d.color.body;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 28, 17, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-24, -4);
+    ctx.lineTo(-36, -14);
+    ctx.lineTo(-26, 4);
+    ctx.fill();
+
+    ctx.fillStyle = d.color.wing;
+    ctx.beginPath();
+    if (flap) {
+      const a = Math.sin(d.t * 25) * 0.6;
+      ctx.save();
+      ctx.translate(-2, -4);
+      ctx.rotate(-0.6 + a);
+      ctx.ellipse(-10, 0, 16, 7, 0, 0, Math.PI * 2);
+      ctx.restore();
+    } else {
+      ctx.ellipse(-4, 0, 15, 9, -0.15, 0, Math.PI * 2);
+    }
+    ctx.fill();
+
+    ctx.fillStyle = d.color.body;
+    ctx.beginPath();
+    ctx.arc(20, -18, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#f28c28";
+    ctx.beginPath();
+    ctx.moveTo(29, -20);
+    ctx.quadraticCurveTo(42, -18, 40, -13);
+    ctx.lineTo(29, -13);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    ctx.arc(23, -21, 2.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(23.7, -21.7, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Word card above the pond: typed letters turn gold, the next letter is underlined,
+  // and a bar underneath shows the time left for this word
+  function drawWord() {
+    if (mode !== "playing" || !currentWord) return;
+    const n = currentWord.length;
+    const box = Math.min(46, (W - 48) / n);
+    const fontSize = Math.round(box * 0.7);
+    const cardW = box * n + 24;
+    const cardH = box + 30;
+    const jitter = shake > 0 ? Math.sin(shake * 80) * 6 : 0;
+    const cx = W / 2 + jitter;
+    const top = Math.max(H * 0.3, hudBottom + 12);
+    const left = cx - cardW / 2;
+
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    roundRect(left, top, cardW, cardH, 14);
+    ctx.fill();
+
+    ctx.font = "700 " + fontSize + "px 'Space Grotesk', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < n; i++) {
+      const x = left + 12 + box * i + box / 2;
+      const y = top + 8 + box / 2;
+      ctx.fillStyle = i < typed ? "#b8860b" : i === typed ? "#1e3a5f" : "rgba(30,58,95,0.4)";
+      ctx.fillText(currentWord.charAt(i), x, y);
+      if (i === typed) {
+        ctx.fillRect(x - box * 0.3, y + box * 0.42, box * 0.6, 3);
+      }
+    }
+
+    const frac = wordTime ? Math.max(0, timeLeft / wordTime) : 1;
+    const barW = cardW - 24;
+    ctx.fillStyle = "#e8edf3";
+    roundRect(left + 12, top + cardH - 14, barW, 6, 3);
+    ctx.fill();
+    ctx.fillStyle = frac > 0.5 ? "#1e3a5f" : frac > 0.25 ? "#b8860b" : "#c0392b";
+    roundRect(left + 12, top + cardH - 14, Math.max(6, barW * frac), 6, 3);
+    ctx.fill();
+  }
+
+  function drawSplashes() {
+    splashes.forEach(function (sp) {
+      if (sp.kind === "ring") {
+        const k = sp.t / 1.4;
+        ctx.strokeStyle = "rgba(255,255,255," + (0.8 * (1 - k)) + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(sp.x, sp.y + 8, 20 + k * 70, 6 + k * 20, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        const k = sp.t / 0.6;
+        ctx.fillStyle = "rgba(200,235,255," + (1 - k) + ")";
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+
+  function drawFloaters() {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "700 18px 'Space Grotesk', sans-serif";
+    floaters.forEach(function (f) {
+      ctx.globalAlpha = 1 - f.t;
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y - 40);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // "New scene" announcement across the top of the pond
+  function drawBanner() {
+    if (!banner) return;
+    const k = banner.t;
+    const alpha = k < 0.3 ? k / 0.3 : k > 2 ? Math.max(0, (2.5 - k) / 0.5) : 1;
+    ctx.globalAlpha = alpha;
+    ctx.font = "700 " + Math.round(Math.min(44, W / 12)) + "px 'Space Grotesk', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(30,58,95,0.6)";
+    ctx.strokeText(banner.text, W / 2, H * 0.4);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(banner.text, W / 2, H * 0.4);
+    ctx.globalAlpha = 1;
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    update(dt);
+    drawScene(now);
+    ducks.slice().sort(function (a, b) { return a.y - b.y; }).forEach(drawDuck);
+    drawSplashes();
+    drawWord();
+    drawFloaters();
+    drawBanner();
+    requestAnimationFrame(frame);
+  }
+
+  // Input
+  const IGNORED_KEYS = ["Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape", "Enter"];
+  window.addEventListener("keydown", function (e) {
+    if (e.repeat) return;
+    if (mode === "menu") {
+      if (e.key === "Enter") { e.preventDefault(); startGame(); }
+      return;
+    }
+    if (mode === "over") return;
+    if (e.key === "Escape") { showMenu(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (IGNORED_KEYS.indexOf(e.key) !== -1 || e.key.length !== 1) return;
+    e.preventDefault();
+    ensureAudio();
+    handlePress(e.key.toUpperCase());
+  });
+
+  document.querySelectorAll("[data-level]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      level = b.getAttribute("data-level");
+      syncMenu();
+      updateHud();
+    });
+  });
+  $("[data-start]").addEventListener("click", startGame);
+  $("[data-again]").addEventListener("click", startGame);
+  $("[data-to-menu]").addEventListener("click", showMenu);
+  menuBtn.addEventListener("click", function () { menuBtn.blur(); showMenu(); });
+  soundBtn.addEventListener("click", function () {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? "Sound: on" : "Sound: off";
+    soundBtn.blur();
+  });
+  window.addEventListener("resize", resize);
+
+  resize();
+  refillBank();
+  syncMenu();
+  updateHud();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
